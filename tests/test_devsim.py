@@ -92,3 +92,57 @@ def test_element_field_uses_dgetrf_dgetrs():
     print("shim calls:", after)
     assert after["dgetrf"] > before["dgetrf"]
     assert after["dgetrs"] > before["dgetrs"]
+
+
+def test_ac_capacitor_uses_complex_blas():
+    """Unit-permittivity 1 x 1 square between two contacts: C = 1 per unit depth.
+
+    The small-signal AC solve factors a complex matrix, which is the only path
+    through DEVSIM's UMFPACK solver that calls the complex level-2/3 BLAS. A 2D
+    mesh is needed for fronts large enough to reach ?trsv.
+    """
+    ds.create_2d_mesh(mesh="m3")
+    for pos in (-0.1, 0.0, 1.0, 1.1):
+        ds.add_2d_mesh_line(mesh="m3", dir="x", pos=pos, ps=0.1)
+    for pos in (0.0, 1.0):
+        ds.add_2d_mesh_line(mesh="m3", dir="y", pos=pos, ps=0.1)
+    ds.add_2d_region(mesh="m3", material="Si", region="r", xl=0.0, xh=1.0, yl=0.0, yh=1.0)
+    # 2D contacts are where the region meets a box; metal regions supply the boxes.
+    for name, xl, xh in (("left", -0.1, 0.0), ("right", 1.0, 1.1)):
+        ds.add_2d_region(mesh="m3", material="metal", region=f"m_{name}",
+                         xl=xl, xh=xh, yl=0.0, yh=1.0)
+        ds.add_2d_contact(mesh="m3", name=name, material="metal", region="r",
+                          xl=xl, xh=xh, yl=0.0, yh=1.0)
+    ds.finalize_mesh(mesh="m3")
+    ds.create_device(mesh="m3", device="d3")
+    ds.node_solution(device="d3", region="r", name="V")
+    _laplace("d3", "r")
+    ds.equation(device="d3", region="r", name="VEq", variable_name="V",
+                edge_model="E", variable_update="default")
+    ds.circuit_element(name="V1", n1="vleft", n2=0, value=0.0, acreal=1.0)
+    ds.contact_node_model(device="d3", contact="left", name="left_bc", equation="V - vleft")
+    ds.contact_node_model(device="d3", contact="left", name="left_bc:V", equation="1")
+    ds.contact_node_model(device="d3", contact="left", name="left_bc:vleft", equation="-1")
+    ds.contact_equation(device="d3", contact="left", name="VEq", node_model="left_bc",
+                        edge_charge_model="E", circuit_node="vleft")
+    ds.contact_node_model(device="d3", contact="right", name="right_bc", equation="V")
+    ds.contact_node_model(device="d3", contact="right", name="right_bc:V", equation="1")
+    ds.contact_equation(device="d3", contact="right", name="VEq", node_model="right_bc",
+                        edge_charge_model="E")
+
+    before = devsim_openblas.calls()
+    ds.solve(type="dc", absolute_error=1e-12, relative_error=1e-12, maximum_iterations=20)
+    frequency = 1e3
+    ds.solve(type="ac", frequency=frequency)
+    after = devsim_openblas.calls()
+
+    current = complex(
+        ds.get_circuit_node_value(node="V1.I", solution="ssac_real"),
+        ds.get_circuit_node_value(node="V1.I", solution="ssac_imag"),
+    )
+    assert abs(current.imag) / (2 * np.pi * frequency) == pytest.approx(1.0, rel=1e-9)
+    assert abs(current.real) < 1e-9 * abs(current.imag)
+    called = {name for name in after if after[name] > before[name]}
+    print("shim calls:", {name: after[name] - before[name] for name in sorted(called)})
+    blas = {f"{t}{r}" for t in "dz" for r in ("gemm", "gemv", "trsm", "trsv")}
+    assert blas | {"dger", "zgeru"} <= called
