@@ -1,5 +1,5 @@
 [build-system]
-requires = ["scikit-build-core>=0.10"]
+requires = ["scikit-build-core>=0.11"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -8,8 +8,26 @@ version = "0.1.0"
 description = "Run DEVSIM on the OpenBLAS shipped by scipy-openblas32, with no system BLAS/LAPACK or MKL"
 readme = "README.md"
 license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{ name = "Benjamin Vial" }]
 requires-python = ">=3.9"
 dependencies = ["scipy-openblas32"]
+keywords = ["devsim", "tcad", "openblas", "blas", "lapack"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: C",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+
+[project.urls]
+Repository = "https://github.com/benvial/devsim-openblas"
+Issues = "https://github.com/benvial/devsim-openblas/issues"
+"Upstream proposal" = "https://github.com/devsim/devsim/issues/167"
 
 [project.optional-dependencies]
 test = ["devsim>=2.6", "numpy", "pytest"]
