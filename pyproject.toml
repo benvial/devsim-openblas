@@ -1,0 +1,31 @@
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "devsim-openblas"
+version = "0.1.0"
+description = "Run DEVSIM on the OpenBLAS shipped by scipy-openblas32, with no system BLAS/LAPACK or MKL"
+readme = "README.md"
+license = "BSD-3-Clause"
+requires-python = ">=3.9"
+dependencies = ["scipy-openblas32"]
+
+[project.optional-dependencies]
+test = ["devsim>=2.6", "numpy", "pytest"]
+
+[tool.scikit-build]
+wheel.packages = ["src/devsim_openblas"]
+# The shim is a plain shared library loaded through ctypes, not an extension
+# module, so one wheel per platform serves every Python 3 version.
+wheel.py-api = "py3"
+wheel.exclude = ["**.lib", "**.exp"]
+
+[tool.cibuildwheel]
+build = "cp312-*"
+skip = "*-musllinux_* *-win32 *_i686"
+test-extras = ["test"]
+test-command = "pytest {project}/tests -v -s"
+
+[tool.cibuildwheel.macos]
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0" }
